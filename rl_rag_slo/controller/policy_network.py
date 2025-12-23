@@ -1,43 +1,42 @@
-"""Policy network scaffolding for selecting RAG actions."""
-
-from dataclasses import dataclass
-from typing import List
-
-
-@dataclass
-class PolicyOutput:
-    """Container for policy network outputs."""
-
-    action_logits: List[float]
-    value_estimate: float
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import Union
 
 
-class PolicyNetwork:
-    """Placeholder policy network interface.
-
-    TODO: integrate with the actual model implementation.
+class PolicyNetwork(nn.Module):
+    """
+    Simple MLP policy network for a contextual bandit over discrete RAG actions.
     """
 
-    def __init__(self, input_dim: int, num_actions: int) -> None:
-        """Initialize the policy network metadata.
+    def __init__(self, state_dim: int, num_actions: int, hidden_dim: int = 256):
+        super().__init__()
+        self.fc1 = nn.Linear(state_dim, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        self.logits = nn.Linear(hidden_dim, num_actions)
 
-        TODO: construct model layers and optimizers.
+    def forward(self, state: torch.Tensor) -> torch.Tensor:
         """
-        self.input_dim = input_dim
-        self.num_actions = num_actions
-
-    def forward(self, features: List[float]) -> PolicyOutput:
-        """Run a forward pass over encoded features.
-
-        TODO: compute logits and value predictions.
+        Compute logits over actions given a batch of states.
+        state: shape (batch_size, state_dim)
+        returns: shape (batch_size, num_actions)
         """
-        # TODO: Replace with model inference.
-        return PolicyOutput(action_logits=[0.0] * self.num_actions, value_estimate=0.0)
+        if state.dim() == 1:
+            state = state.unsqueeze(0)
+        x = F.relu(self.fc1(state))
+        x = F.relu(self.fc2(x))
+        return self.logits(x)
 
-    def select_action(self, features: List[float]) -> int:
-        """Select an action index from the policy output.
-
-        TODO: apply sampling or argmax selection.
+    def act(self, state: torch.Tensor, temperature: float = 0.1) -> torch.Tensor:
         """
-        # TODO: Implement selection strategy.
-        return 0
+        Sample an action index for a single state or batch of states
+        using softmax with the given temperature.
+        If input state is 1D, returns a scalar tensor.
+        If input state is 2D, returns a tensor of shape (batch_size,).
+        """
+        logits = self.forward(state)
+        probs = F.softmax(logits / temperature, dim=-1)
+        actions = torch.multinomial(probs, num_samples=1).squeeze(-1)
+        if state.dim() == 1:
+            return actions.squeeze(0)
+        return actions
