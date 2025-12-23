@@ -1,29 +1,41 @@
+"""State encoding utilities for the RAG SLO controller."""
+
 from dataclasses import dataclass
 from typing import Dict, List
 
 
 @dataclass
-class EncodedState:
-    """Container for encoded controller state features."""
+class StateEncoding:
+    """Structured representation of controller state features."""
 
-    vector: List[float]
-    metadata: Dict[str, str]
+    features: List[float]
+    metadata: Dict[str, float]
 
 
 class StateEncoder:
-    """Encode raw controller observations into model-ready features."""
+    """Encodes raw telemetry into model-ready feature vectors."""
 
-    def __init__(self, feature_names: List[str]) -> None:
-        """Initialize the encoder.
+    def __init__(self) -> None:
+        """Initialize the encoder configuration.
 
-        TODO: validate feature names and configure normalization.
+        TODO: accept configurable feature definitions.
         """
-        self._feature_names = feature_names
+        # TODO: Add configuration for feature extraction.
+        self._feature_names: List[str] = []
 
-    def encode(self, observation: Dict[str, float]) -> EncodedState:
-        """Encode a raw observation into a feature vector.
+    def encode(self, telemetry: Dict[str, float]) -> StateEncoding:
+        """Encode telemetry into a structured state representation.
 
-        TODO: implement feature extraction and normalization.
+        TODO: implement feature extraction logic.
         """
-        # TODO: build encoded vector based on configured feature names.
-        return EncodedState(vector=[], metadata={})
+        # TODO: Map telemetry to ordered feature list.
+        features: List[float] = []
+        return StateEncoding(features=features, metadata=dict(telemetry))
+
+    def feature_names(self) -> List[str]:
+        """Return the ordered list of feature names.
+
+        TODO: keep in sync with encode output.
+        """
+        # TODO: Return configured feature names.
+        return list(self._feature_names)

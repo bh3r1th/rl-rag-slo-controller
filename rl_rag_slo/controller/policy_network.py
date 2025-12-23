@@ -1,37 +1,43 @@
+"""Policy network scaffolding for selecting RAG actions."""
+
 from dataclasses import dataclass
 from typing import List
 
 
 @dataclass
 class PolicyOutput:
-    """Placeholder output for a policy network inference."""
+    """Container for policy network outputs."""
 
-    action_scores: List[float]
+    action_logits: List[float]
+    value_estimate: float
 
 
 class PolicyNetwork:
-    """Neural policy network for selecting RAG actions."""
+    """Placeholder policy network interface.
+
+    TODO: integrate with the actual model implementation.
+    """
 
     def __init__(self, input_dim: int, num_actions: int) -> None:
-        """Initialize the policy network.
+        """Initialize the policy network metadata.
 
-        TODO: define model layers and load weights.
+        TODO: construct model layers and optimizers.
         """
-        self._input_dim = input_dim
-        self._num_actions = num_actions
+        self.input_dim = input_dim
+        self.num_actions = num_actions
 
     def forward(self, features: List[float]) -> PolicyOutput:
-        """Run a forward pass over the input features.
+        """Run a forward pass over encoded features.
 
-        TODO: implement model inference.
+        TODO: compute logits and value predictions.
         """
-        # TODO: compute action scores.
-        return PolicyOutput(action_scores=[0.0] * self._num_actions)
+        # TODO: Replace with model inference.
+        return PolicyOutput(action_logits=[0.0] * self.num_actions, value_estimate=0.0)
 
     def select_action(self, features: List[float]) -> int:
-        """Select the best action for the provided features.
+        """Select an action index from the policy output.
 
-        TODO: implement selection strategy (argmax, sampling, etc.).
+        TODO: apply sampling or argmax selection.
         """
-        # TODO: choose action from policy output.
+        # TODO: Implement selection strategy.
         return 0
