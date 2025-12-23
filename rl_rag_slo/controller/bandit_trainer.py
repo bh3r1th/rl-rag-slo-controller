@@ -1,40 +1,52 @@
-from dataclasses import dataclass
-from typing import Dict, List, Optional
+"""Bandit training scaffolding for the RAG controller."""
 
-from .actions import RagActionConfig
+from dataclasses import dataclass
+from typing import Dict, List
+
+from rl_rag_slo.controller.actions import RagActionConfig
+from rl_rag_slo.controller.state_encoder import StateEncoding
 
 
 @dataclass
-class BanditBatch:
-    """Batch of bandit feedback data."""
+class BanditStep:
+    """Record of a single bandit interaction."""
 
-    rewards: List[float]
-    actions: List[int]
-    metadata: Optional[Dict[str, str]] = None
+    state: StateEncoding
+    action: RagActionConfig
+    reward: float
+    metadata: Dict[str, float]
 
 
 class BanditTrainer:
-    """Skeleton trainer for bandit-style updates."""
+    """Placeholder trainer for contextual bandit updates."""
 
-    def __init__(self, action_space: List[RagActionConfig]) -> None:
-        """Initialize the trainer with available actions.
+    def __init__(self) -> None:
+        """Initialize training buffers and hyperparameters.
 
-        TODO: set up optimization state and metrics.
+        TODO: accept training configuration.
         """
-        self._action_space = action_space
+        self._history: List[BanditStep] = []
 
-    def record_feedback(self, reward: float, action_id: int) -> None:
-        """Record reward feedback for a taken action.
+    def record_step(self, step: BanditStep) -> None:
+        """Record a bandit step for offline training.
 
-        TODO: store feedback in a replay buffer.
+        TODO: apply retention or sampling strategies.
         """
-        # TODO: implement feedback storage.
+        # TODO: Add replay buffer logic.
+        self._history.append(step)
+
+    def train(self) -> None:
+        """Run a training pass over recorded steps.
+
+        TODO: implement optimization updates.
+        """
+        # TODO: Perform model updates.
         return None
 
-    def train_step(self, batch: BanditBatch) -> None:
-        """Perform a single training step.
+    def history(self) -> List[BanditStep]:
+        """Return recorded training steps.
 
-        TODO: implement bandit update logic.
+        TODO: consider returning a copy for safety.
         """
-        # TODO: update policy based on bandit feedback.
-        return None
+        # TODO: Return a copy if needed.
+        return list(self._history)
