@@ -17,10 +17,14 @@ def deterministic_embed(question: str, dim: int = 128) -> np.ndarray:
     """
     Create a deterministic pseudo-random embedding for the question based on its hash.
 
-    This is ONLY for testing the RL pipeline and should be replaced by a real encoder later.
+    This version clamps the seed into the 32-bit range accepted by numpy.RandomState.
     """
+    import hashlib
+
     h = hashlib.sha256(question.encode("utf-8")).digest()
-    seed = int.from_bytes(h[:8], "little", signed=False)
+    # Take 8 bytes, interpret as integer, then clamp into [0, 2**32 - 1]
+    raw_seed = int.from_bytes(h[:8], "little", signed=False)
+    seed = raw_seed % (2**32 - 1)
     rng = np.random.RandomState(seed)
     return rng.normal(loc=0.0, scale=1.0, size=(dim,)).astype(np.float32)
 
@@ -73,7 +77,7 @@ def main() -> None:
     state_encoder = StateEncoder(embedder=embedder, num_domains=1)
 
     # 4) Build SLO weights (use "balanced" profile)
-    slo_vec = get_slo_vector("balanced")
+    slo_vec = get_slo_vector("quality_first")
     slo_weights = slo_vector_to_weights(slo_vec)
     env = RagEnvironment(retriever=retriever, llm_client=llm_client, slo_weights=slo_weights)
 

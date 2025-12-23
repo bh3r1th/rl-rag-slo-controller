@@ -25,12 +25,7 @@ class RagEnvironment:
     Each call to `step` corresponds to one question.
     """
 
-    def __init__(
-        self,
-        retriever: BM25Retriever,
-        llm_client: BaseLLMClient,
-        slo_weights: Dict[str, float],
-    ) -> None:
+    def __init__(self, retriever: BM25Retriever, llm_client: BaseLLMClient, slo_weights: Dict[str, float]):
         """
         Args:
             retriever: Object with retrieve(query, top_k) -> list of docs.
@@ -76,9 +71,18 @@ class RagEnvironment:
 
         cfg: RagActionConfig = ACTIONS[action_id]
 
+        # Initialize extra_eval dict
+        if extra_eval is None:
+            extra_eval = {}
+
+        # REFUSAL-ONLY ACTION: no retrieval, no LLM call
         if cfg.answer_mode == "refuse":
             answer = "I cannot safely answer this question based on the available context."
             cost_tokens = len(answer.split())
+
+            # For refusal we define retrieval_hit = 0 (we didn't even try to retrieve).
+            extra_eval["retrieval_hit"] = 0
+
             reward, cost_tokens = self._compute_reward(
                 answer=answer,
                 ground_truth=ground_truth,
@@ -96,8 +100,24 @@ class RagEnvironment:
                 },
             )
 
+        # NORMAL ACTION: retrieval + LLM call
         docs = self.retriever.retrieve(question, top_k=cfg.k)
 
+        # Compute a retrieval-based "oracle" hit signal:
+        # If ground_truth is not None and appears in any retrieved doc.text -> retrieval_hit = 1, else 0.
+        retrieval_hit = 0
+        if ground_truth is not None:
+            gt_norm = ground_truth.strip().lower()
+            if gt_norm:
+                for d in docs:
+                    text = str(d.get("text", "")).lower()
+                    if gt_norm in text:
+                        retrieval_hit = 1
+                        break
+
+        extra_eval["retrieval_hit"] = retrieval_hit
+
+        # LLM call (DummyLLM or real backend)
         answer, n_tokens_generated, n_tokens_context = self.llm_client.answer_with_context(
             question=question,
             docs=docs,
@@ -119,6 +139,7 @@ class RagEnvironment:
             "answer_mode": cfg.answer_mode,
             "n_tokens_generated": n_tokens_generated,
             "n_tokens_context": n_tokens_context,
+            "retrieval_hit": retrieval_hit,
         }
 
         return RagStepResult(
@@ -138,14 +159,19 @@ class RagEnvironment:
         """
         Compute scalar reward using compute_qa_score and SLO weights.
 
-        Reward is:
-        reward = w_quality * accuracy
-                 - w_cost * lambda_cost * cost_tokens
-                 - w_halluc * lambda_halluc * hallucination
-                 - w_refusal * (lambda_wrong_ref * wrong_refusal - lambda_correct_ref * correct_refusal)
+        We treat retrieval_hit (whether the true answer string appears in retrieved docs)
+        as the primary "quality" signal instead of strict EM over the generated text.
+
+        Reward:
+
+            reward = w_quality * retrieval_hit
+                     - w_cost * lambda_cost * cost_tokens
+                     - w_halluc * lambda_halluc * hallucination
+                     - w_refusal * (lambda_wrong_ref * wrong_refusal - lambda_correct_ref * correct_refusal)
         """
         metrics = compute_qa_score(answer, ground_truth, extra_eval)
-        accuracy = float(metrics.get("accuracy", 0.0))
+        # retrieval_hit may be injected via extra_eval
+        retrieval_hit = int(metrics.get("retrieval_hit", 0))
         hallucination = int(metrics.get("hallucination", 0))
         correct_refusal = int(metrics.get("correct_refusal", 0))
         wrong_refusal = int(metrics.get("wrong_refusal", 0))
@@ -161,7 +187,7 @@ class RagEnvironment:
         lambda_cr = float(self.slo.get("lambda_correct_ref", 1.0))
 
         reward = (
-            wq * accuracy
+            wq * float(retrieval_hit)
             - wc * lambda_cost * float(cost_tokens)
             - wh * lambda_h * float(hallucination)
             - wr * (lambda_wr * float(wrong_refusal) - lambda_cr * float(correct_refusal))

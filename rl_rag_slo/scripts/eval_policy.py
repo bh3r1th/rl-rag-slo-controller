@@ -16,10 +16,17 @@ from rl_rag_slo.llm_backend.answer_scorer import compute_qa_score
 
 
 def deterministic_embed(question: str, dim: int = 128) -> np.ndarray:
+    """
+    Create a deterministic pseudo-random embedding for the question based on its hash.
+
+    This version clamps the seed into the 32-bit range accepted by numpy.RandomState.
+    """
     import hashlib
 
     h = hashlib.sha256(question.encode("utf-8")).digest()
-    seed = int.from_bytes(h[:8], "little", signed=False)
+    # Take 8 bytes, interpret as integer, then clamp into [0, 2**32 - 1]
+    raw_seed = int.from_bytes(h[:8], "little", signed=False)
+    seed = raw_seed % (2**32 - 1)
     rng = np.random.RandomState(seed)
     return rng.normal(loc=0.0, scale=1.0, size=(dim,)).astype(np.float32)
 
@@ -44,22 +51,28 @@ def evaluate_policy(
 ) -> Dict[str, float]:
     """
     Evaluate the learned policy on a list of QA examples.
+
     Returns aggregated metrics:
-      - avg_accuracy
+      - avg_accuracy        (EM-based, mostly for reference with real LLMs)
       - avg_cost_tokens
       - hallucination_rate
       - refusal_rate
+      - avg_reward          (environment reward)
+      - retrieval_hit_rate  (fraction of examples where retrieval_hit == 1)
     """
     total_acc = 0.0
     total_cost = 0.0
     total_halluc = 0
     total_refusal = 0
+    total_reward = 0.0
+    total_retrieval_hit = 0
     n = 0
 
     policy = policy_trainer.policy.to(device)
     policy.eval()
 
     for ex in examples:
+        # Build state
         state_np = state_encoder.encode(
             question=ex.question,
             domain_id=0,
@@ -88,9 +101,14 @@ def evaluate_policy(
         total_acc += float(metrics.get("accuracy", 0.0))
         total_cost += float(step_result.cost_tokens)
         total_halluc += int(metrics.get("hallucination", 0))
+        # refusal if is_refusal() inside metrics (correct_refusal or wrong_refusal)
         total_refusal += int(metrics.get("correct_refusal", 0)) + int(
             metrics.get("wrong_refusal", 0)
         )
+
+        total_reward += float(step_result.reward)
+        total_retrieval_hit += int(step_result.meta.get("retrieval_hit", 0))
+
         n += 1
 
     if n == 0:
@@ -99,6 +117,8 @@ def evaluate_policy(
             "avg_cost_tokens": 0.0,
             "hallucination_rate": 0.0,
             "refusal_rate": 0.0,
+            "avg_reward": 0.0,
+            "retrieval_hit_rate": 0.0,
         }
 
     return {
@@ -106,6 +126,8 @@ def evaluate_policy(
         "avg_cost_tokens": total_cost / n,
         "hallucination_rate": total_halluc / n,
         "refusal_rate": total_refusal / n,
+        "avg_reward": total_reward / n,
+        "retrieval_hit_rate": total_retrieval_hit / n,
     }
 
 
@@ -116,7 +138,14 @@ def evaluate_baseline(
 ) -> Dict[str, float]:
     """
     Evaluate a fixed baseline action on a list of QA examples.
-    Returns the same aggregated metrics as evaluate_policy.
+
+    Returns aggregated metrics:
+      - avg_accuracy
+      - avg_cost_tokens
+      - hallucination_rate
+      - refusal_rate
+      - avg_reward
+      - retrieval_hit_rate
     """
     from rl_rag_slo.llm_backend.answer_scorer import compute_qa_score as _compute
 
@@ -124,6 +153,8 @@ def evaluate_baseline(
     total_cost = 0.0
     total_halluc = 0
     total_refusal = 0
+    total_reward = 0.0
+    total_retrieval_hit = 0
     n = 0
 
     for ex in examples:
@@ -144,6 +175,10 @@ def evaluate_baseline(
         total_refusal += int(metrics.get("correct_refusal", 0)) + int(
             metrics.get("wrong_refusal", 0)
         )
+
+        total_reward += float(step_result.reward)
+        total_retrieval_hit += int(step_result.meta.get("retrieval_hit", 0))
+
         n += 1
 
     if n == 0:
@@ -152,6 +187,8 @@ def evaluate_baseline(
             "avg_cost_tokens": 0.0,
             "hallucination_rate": 0.0,
             "refusal_rate": 0.0,
+            "avg_reward": 0.0,
+            "retrieval_hit_rate": 0.0,
         }
 
     return {
@@ -159,6 +196,8 @@ def evaluate_baseline(
         "avg_cost_tokens": total_cost / n,
         "hallucination_rate": total_halluc / n,
         "refusal_rate": total_refusal / n,
+        "avg_reward": total_reward / n,
+        "retrieval_hit_rate": total_retrieval_hit / n,
     }
 
 
@@ -203,7 +242,7 @@ def main() -> None:
 
     embedder = lambda q: deterministic_embed(q, dim=128)
     state_encoder = StateEncoder(embedder=embedder, num_domains=1)
-    slo_vec = get_slo_vector("balanced")
+    slo_vec = get_slo_vector("quality_first")
     slo_weights = slo_vector_to_weights(slo_vec)
     env = RagEnvironment(retriever=retriever, llm_client=llm_client, slo_weights=slo_weights)
 

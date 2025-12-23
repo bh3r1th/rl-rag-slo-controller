@@ -1,0 +1,36 @@
+{
+  "data": [
+    {
+      "title": "Dummy article",
+      "paragraphs": [
+        {
+          "context": "The Eiffel Tower is located in Paris, France. It was completed in 1889.",
+          "qas": [
+            {
+              "id": "dummy-1",
+              "question": "Where is the Eiffel Tower located?",
+              "is_impossible": false,
+              "answers": [
+                { "text": "Paris, France", "answer_start": 31 }
+              ]
+            },
+            {
+              "id": "dummy-2",
+              "question": "When was the Eiffel Tower completed?",
+              "is_impossible": false,
+              "answers": [
+                { "text": "1889", "answer_start": 63 }
+              ]
+            },
+            {
+              "id": "dummy-3",
+              "question": "Who designed the Eiffel Tower?",
+              "is_impossible": true,
+              "answers": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -13,10 +13,17 @@ from rl_rag_slo.retrievers.bm25_retriever import BM25Retriever
 
 
 def deterministic_embed(question: str, dim: int = 128) -> np.ndarray:
+    """
+    Create a deterministic pseudo-random embedding for the question based on its hash.
+
+    This version clamps the seed into the 32-bit range accepted by numpy.RandomState.
+    """
     import hashlib
 
     h = hashlib.sha256(question.encode("utf-8")).digest()
-    seed = int.from_bytes(h[:8], "little", signed=False)
+    # Take 8 bytes, interpret as integer, then clamp into [0, 2**32 - 1]
+    raw_seed = int.from_bytes(h[:8], "little", signed=False)
+    seed = raw_seed % (2**32 - 1)
     rng = np.random.RandomState(seed)
     return rng.normal(loc=0.0, scale=1.0, size=(dim,)).astype(np.float32)
 
