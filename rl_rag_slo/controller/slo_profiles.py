@@ -1,45 +1,21 @@
-"""SLO profile definitions for the RAG controller."""
+"""SLO profile vectors used to weight quality, cost, refusal, and hallucination."""
 
-from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict
+
+import numpy as np
+
+# Each vector: [w_quality, w_cost, w_refusal, w_halluc]
+SLO_PROFILES: Dict[str, np.ndarray] = {
+    "balanced": np.array([0.5, 0.2, 0.1, 0.2], dtype=np.float32),
+    "cheap": np.array([0.4, 0.4, 0.1, 0.1], dtype=np.float32),
+    "safe": np.array([0.5, 0.1, 0.1, 0.3], dtype=np.float32),
+}
 
 
-@dataclass(frozen=True)
-class SLOProfile:
-    """Represents target service-level objectives for the controller."""
-
-    name: str
-    targets: Dict[str, float]
-    weights: Optional[Dict[str, float]] = None
-
-
-class SLOProfileStore:
-    """Container for managing available SLO profiles."""
-
-    def __init__(self) -> None:
-        """Initialize an empty store."""
-        self._profiles: Dict[str, SLOProfile] = {}
-
-    def add(self, profile: SLOProfile) -> None:
-        """Add a new profile to the store.
-
-        TODO: validate profile contents.
-        """
-        # TODO: Validate targets/weights ranges.
-        self._profiles[profile.name] = profile
-
-    def get(self, name: str) -> SLOProfile:
-        """Fetch a profile by name.
-
-        TODO: handle missing profiles gracefully.
-        """
-        # TODO: Add missing-profile handling.
-        return self._profiles[name]
-
-    def list_profiles(self) -> Dict[str, SLOProfile]:
-        """Return all stored profiles.
-
-        TODO: consider returning a copy to prevent mutation.
-        """
-        # TODO: Return a copy if needed.
-        return self._profiles
+def get_slo_vector(name: str) -> np.ndarray:
+    """
+    Return a COPY of the SLO vector for the given profile name as float32.
+    Raise KeyError if the name is unknown.
+    """
+    vec = SLO_PROFILES[name]
+    return vec.astype(np.float32).copy()
