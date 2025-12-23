@@ -1,41 +1,95 @@
-"""State encoding utilities for the RAG SLO controller."""
+from typing import Callable, Dict, Any, Optional
 
-from dataclasses import dataclass
-from typing import Dict, List
-
-
-@dataclass
-class StateEncoding:
-    """Structured representation of controller state features."""
-
-    features: List[float]
-    metadata: Dict[str, float]
+import numpy as np
 
 
 class StateEncoder:
-    """Encodes raw telemetry into model-ready feature vectors."""
+    """
+    Encodes (question, domain_id, SLO vector, extra metadata) into a flat NumPy state vector.
+    """
 
-    def __init__(self) -> None:
-        """Initialize the encoder configuration.
-
-        TODO: accept configurable feature definitions.
+    def __init__(self, embedder: Callable[[str], np.ndarray], num_domains: int = 4):
         """
-        # TODO: Add configuration for feature extraction.
-        self._feature_names: List[str] = []
-
-    def encode(self, telemetry: Dict[str, float]) -> StateEncoding:
-        """Encode telemetry into a structured state representation.
-
-        TODO: implement feature extraction logic.
+        embedder: callable mapping question text -> embedding vector (np.ndarray)
+        num_domains: number of domains for one-hot encoding.
         """
-        # TODO: Map telemetry to ordered feature list.
-        features: List[float] = []
-        return StateEncoding(features=features, metadata=dict(telemetry))
+        self.embedder = embedder
+        self.num_domains = num_domains
 
-    def feature_names(self) -> List[str]:
-        """Return the ordered list of feature names.
-
-        TODO: keep in sync with encode output.
+    def encode(
+        self,
+        question: str,
+        domain_id: int,
+        slo_vec: np.ndarray,
+        extra_meta: Optional[Dict[str, Any]] = None,
+    ) -> np.ndarray:
         """
-        # TODO: Return configured feature names.
-        return list(self._feature_names)
+        Build the state vector as concatenation of:
+        - question embedding
+        - question length in tokens (1 scalar)
+        - 8D one-hot question type: [what, why, how, when, where, who, yesno, other]
+        - one-hot domain_id of length self.num_domains
+        - SLO vector (float32)
+        - optional extra features from extra_meta
+        Returns np.ndarray with dtype float32.
+        """
+        q_emb = self.embedder(question).astype(np.float32)
+        q_len = np.array([len(question.split())], dtype=np.float32)
+        q_type = self._infer_q_type(question)
+        domain_one_hot = self._domain_one_hot(domain_id)
+        slo_vec = slo_vec.astype(np.float32)
+
+        parts = [q_emb, q_len, q_type, domain_one_hot, slo_vec]
+        if extra_meta:
+            parts.append(self._encode_extra(extra_meta))
+        state = np.concatenate(parts, axis=0).astype(np.float32)
+        return state
+
+    def _infer_q_type(self, q: str) -> np.ndarray:
+        """
+        Infer question type from prefix and return 8D one-hot:
+        [what, why, how, when, where, who, yesno, other].
+        """
+        types = ["what", "why", "how", "when", "where", "who"]
+        q_lower = q.strip().lower()
+        one_hot = np.zeros(8, dtype=np.float32)
+        for i, t in enumerate(types):
+            if q_lower.startswith(t):
+                one_hot[i] = 1.0
+                return one_hot
+        yesno_prefixes = ["is", "are", "do", "does", "did", "can"]
+        if any(q_lower.startswith(p) for p in yesno_prefixes):
+            one_hot[6] = 1.0  # yesno
+        else:
+            one_hot[7] = 1.0  # other
+        return one_hot
+
+    def _domain_one_hot(self, domain_id: int) -> np.ndarray:
+        """
+        One-hot encode domain_id into a vector of length self.num_domains.
+        Clamp domain_id to [0, num_domains-1].
+        """
+        idx = max(0, min(domain_id, self.num_domains - 1))
+        vec = np.zeros(self.num_domains, dtype=np.float32)
+        vec[idx] = 1.0
+        return vec
+
+    def _encode_extra(self, extra_meta: Dict[str, Any]) -> np.ndarray:
+        """
+        Encode optional metadata into extra numeric features.
+        Known keys:
+          - 'avg_score'
+          - 'max_score'
+          - 'num_candidates'
+        Missing keys are skipped. Returns float32 vector (possibly empty).
+        """
+        features = []
+        for key in ("avg_score", "max_score", "num_candidates"):
+            if key in extra_meta and extra_meta[key] is not None:
+                try:
+                    features.append(float(extra_meta[key]))
+                except (TypeError, ValueError):
+                    continue
+        if not features:
+            return np.zeros(0, dtype=np.float32)
+        return np.array(features, dtype=np.float32)
