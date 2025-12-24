@@ -74,7 +74,9 @@ class OpenAILLMClient(BaseLLMClient):
     - Estimates token counts by splitting on whitespace (approximate only).
     """
 
-    def __init__(self, small_model: str = "gpt-4o-mini", base_model: str = "gpt-4o"):
+    def __init__(
+        self, small_model: str = "gpt-4.1-nano", base_model: str = "gpt-4.1-nano"
+    ):
         try:
             from openai import OpenAI  # type: ignore
         except ImportError as exc:

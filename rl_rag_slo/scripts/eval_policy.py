@@ -6,7 +6,7 @@ import torch
 
 from rl_rag_slo.datasets.squad2_loader import load_squad2_qa, build_squad2_corpus
 from rl_rag_slo.retrievers.bm25_retriever import BM25Retriever
-from rl_rag_slo.llm_backend.llm_client import DummyLLMClient
+from rl_rag_slo.llm_backend.llm_client import DummyLLMClient, OpenAILLMClient
 from rl_rag_slo.controller.state_encoder import StateEncoder
 from rl_rag_slo.controller.slo_profiles import get_slo_vector
 from rl_rag_slo.env.rag_env import RagEnvironment
@@ -237,8 +237,9 @@ def main() -> None:
 
     corpus = build_squad2_corpus(examples)
 
+    # llm_client = DummyLLMClient()
     retriever = BM25Retriever(corpus)
-    llm_client = DummyLLMClient()
+    llm_client = OpenAILLMClient()
 
     embedder = lambda q: deterministic_embed(q, dim=128)
     state_encoder = StateEncoder(embedder=embedder, num_domains=1)
