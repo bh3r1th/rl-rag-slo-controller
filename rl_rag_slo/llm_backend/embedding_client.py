@@ -27,10 +27,18 @@ class DeterministicHashEmbedder(BaseEmbedder):
         self.dim = dim
 
     def embed(self, text: str) -> np.ndarray:
+        """
+        Return a deterministic pseudo-random embedding based on a hash of the input text.
+
+        We clamp the seed into the 32-bit range accepted by numpy.RandomState
+        to avoid ValueError: "Seed must be between 0 and 2**32 - 1".
+        """
         import hashlib
 
         h = hashlib.sha256(text.encode("utf-8")).digest()
-        seed = int.from_bytes(h[:8], "little", signed=False)
+        # Take 8 bytes, interpret as integer, then clamp into [0, 2**32 - 1]
+        raw_seed = int.from_bytes(h[:8], "little", signed=False)
+        seed = raw_seed % (2**32 - 1)
         rng = np.random.RandomState(seed)
         return rng.normal(loc=0.0, scale=1.0, size=(self.dim,)).astype(np.float32)
 

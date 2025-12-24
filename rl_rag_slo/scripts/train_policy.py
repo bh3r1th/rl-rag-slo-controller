@@ -49,7 +49,8 @@ def main() -> None:
     rewards_np = data["rewards"].astype(np.float32)
 
     state_dim = int(states_np.shape[1])
-    num_actions = max(int(actions_np.max()) + 1, len(ACTIONS))
+    # Use the current ACTIONS definition as the source of truth.
+    num_actions = len(ACTIONS)
 
     states = torch.from_numpy(states_np)
     actions = torch.from_numpy(actions_np)
