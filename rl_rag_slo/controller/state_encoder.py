@@ -26,23 +26,38 @@ class StateEncoder:
         """
         Build the state vector as concatenation of:
         - question embedding
-        - question length in tokens (1 scalar)
-        - 8D one-hot question type: [what, why, how, when, where, who, yesno, other]
         - one-hot domain_id of length self.num_domains
         - SLO vector (float32)
-        - optional extra features from extra_meta
+        - extra features from extra_meta
         Returns np.ndarray with dtype float32.
         """
         q_emb = self.embedder(question).astype(np.float32)
-        q_len = np.array([len(question.split())], dtype=np.float32)
-        q_type = self._infer_q_type(question)
         domain_one_hot = self._domain_one_hot(domain_id)
         slo_vec = slo_vec.astype(np.float32)
 
-        parts = [q_emb, q_len, q_type, domain_one_hot, slo_vec]
-        if extra_meta:
-            parts.append(self._encode_extra(extra_meta))
-        state = np.concatenate(parts, axis=0).astype(np.float32)
+        meta = extra_meta or {}
+        q_len_tokens = int(meta.get("q_len_tokens", 0) or 0)
+        wh_one_hot = meta.get("wh_one_hot", np.zeros(7, dtype=np.float32))
+        bm25_max = float(meta.get("bm25_max", 0.0) or 0.0)
+        bm25_mean = float(meta.get("bm25_mean", 0.0) or 0.0)
+        bm25_gap = float(meta.get("bm25_gap", 0.0) or 0.0)
+
+        q_len_scaled = float(q_len_tokens) / 100.0
+        wh_vec = np.asarray(wh_one_hot, dtype=np.float32)
+        bm_vec = np.array([bm25_max, bm25_mean, bm25_gap], dtype=np.float32)
+
+        extra_features = np.concatenate(
+            [
+                np.array([q_len_scaled], dtype=np.float32),
+                wh_vec.astype(np.float32),
+                bm_vec,
+            ],
+            axis=0,
+        )
+
+        state = np.concatenate(
+            [q_emb, domain_one_hot, slo_vec, extra_features], axis=0
+        ).astype(np.float32)
         return state
 
     def _infer_q_type(self, q: str) -> np.ndarray:

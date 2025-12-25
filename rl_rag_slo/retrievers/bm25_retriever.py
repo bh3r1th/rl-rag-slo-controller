@@ -57,15 +57,9 @@ class BM25Retriever:
         if not self.corpus:
             return []
 
-        if self._use_bm25 and self._bm25 is not None:
-            tokenized_query = query.split()
-            scores = self._bm25.get_scores(tokenized_query)
-        else:
-            self._ensure_tfidf()
-            if self._vectorizer is None or self._tfidf_matrix is None:
-                return []
-            q_vec = self._vectorizer.transform([query])
-            scores = self._cosine_similarity(q_vec, self._tfidf_matrix)[0]
+        scores = self.get_scores(query)
+        if not scores:
+            return []
 
         indexed_scores = list(enumerate(scores))
         indexed_scores.sort(key=lambda x: x[1], reverse=True)
@@ -81,6 +75,26 @@ class BM25Retriever:
                 }
             )
         return results
+
+    def get_scores(self, query: str) -> List[float]:
+        """
+        Return a list of BM25 scores for the given query, one per document in the corpus.
+        Highest scores indicate most relevant documents.
+        """
+        if not self.corpus:
+            return []
+
+        if self._use_bm25 and self._bm25 is not None:
+            tokenized_query = query.split()
+            scores = self._bm25.get_scores(tokenized_query)
+        else:
+            self._ensure_tfidf()
+            if self._vectorizer is None or self._tfidf_matrix is None:
+                return []
+            q_vec = self._vectorizer.transform([query])
+            scores = self._cosine_similarity(q_vec, self._tfidf_matrix)[0]
+
+        return [float(s) for s in scores]
 
     @classmethod
     def from_jsonl(cls, path: str) -> "BM25Retriever":

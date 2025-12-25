@@ -9,6 +9,10 @@ from rl_rag_slo.retrievers.bm25_retriever import BM25Retriever
 from rl_rag_slo.llm_backend.llm_client import DummyLLMClient, OpenAILLMClient
 from rl_rag_slo.controller.state_encoder import StateEncoder
 from rl_rag_slo.controller.slo_profiles import get_slo_vector
+from rl_rag_slo.controller.feature_utils import (
+    compute_question_features,
+    compute_bm25_features,
+)
 from rl_rag_slo.env.rag_env import RagEnvironment
 from rl_rag_slo.controller.bandit_trainer import BanditTrainer
 from rl_rag_slo.controller.actions import ACTIONS
@@ -52,14 +56,12 @@ def evaluate_policy(
     """
     Evaluate the learned policy on a list of QA examples.
 
-    Returns aggregated metrics:
-      - avg_accuracy        (EM-based, mostly for reference with real LLMs)
-      - avg_cost_tokens
-      - hallucination_rate
-      - refusal_rate
-      - avg_reward          (environment reward)
-      - retrieval_hit_rate  (fraction of examples where retrieval_hit == 1)
+    Returns a tuple:
+      - metrics: dict with aggregated metrics
+      - action_counts: dict mapping action_id -> count
     """
+    import collections
+
     total_acc = 0.0
     total_cost = 0.0
     total_halluc = 0
@@ -68,22 +70,29 @@ def evaluate_policy(
     total_retrieval_hit = 0
     n = 0
 
+    action_counts = collections.Counter()
+
     policy = policy_trainer.policy.to(device)
     policy.eval()
 
     for ex in examples:
+        q_feats = compute_question_features(ex.question)
+        bm_feats = compute_bm25_features(env.retriever, ex.question, top_k=5)
+        extra_meta = {**q_feats, **bm_feats}
+
         # Build state
         state_np = state_encoder.encode(
             question=ex.question,
             domain_id=0,
             slo_vec=slo_vec,
-            extra_meta=None,
+            extra_meta=extra_meta,
         )
         state_tensor = torch.from_numpy(state_np).float().to(device)
 
         with torch.no_grad():
             action_id_tensor = policy.act(state_tensor)
         action_id = int(action_id_tensor.item())
+        action_counts[action_id] += 1
 
         step_result = env.step(
             question=ex.question,
@@ -102,17 +111,14 @@ def evaluate_policy(
         total_cost += float(step_result.cost_tokens)
         total_halluc += int(metrics.get("hallucination", 0))
         # refusal if is_refusal() inside metrics (correct_refusal or wrong_refusal)
-        total_refusal += int(metrics.get("correct_refusal", 0)) + int(
-            metrics.get("wrong_refusal", 0)
-        )
-
+        total_refusal += int(metrics.get("correct_refusal", 0)) + int(metrics.get("wrong_refusal", 0))
         total_reward += float(step_result.reward)
-        total_retrieval_hit += int(step_result.meta.get("retrieval_hit", 0))
+        total_retrieval_hit += int(step_result.meta.get("retrieval_hit", 0)) if isinstance(step_result.meta, dict) else 0
 
         n += 1
 
     if n == 0:
-        return {
+        metrics = {
             "avg_accuracy": 0.0,
             "avg_cost_tokens": 0.0,
             "hallucination_rate": 0.0,
@@ -120,15 +126,17 @@ def evaluate_policy(
             "avg_reward": 0.0,
             "retrieval_hit_rate": 0.0,
         }
+    else:
+        metrics = {
+            "avg_accuracy": total_acc / n,
+            "avg_cost_tokens": total_cost / n,
+            "hallucination_rate": total_halluc / n,
+            "refusal_rate": total_refusal / n,
+            "avg_reward": total_reward / n,
+            "retrieval_hit_rate": total_retrieval_hit / n,
+        }
 
-    return {
-        "avg_accuracy": total_acc / n,
-        "avg_cost_tokens": total_cost / n,
-        "hallucination_rate": total_halluc / n,
-        "refusal_rate": total_refusal / n,
-        "avg_reward": total_reward / n,
-        "retrieval_hit_rate": total_retrieval_hit / n,
-    }
+    return metrics, dict(action_counts)
 
 
 def evaluate_baseline(
@@ -229,6 +237,12 @@ def main() -> None:
         default="cpu",
         help="Device to run policy on: 'cpu' or 'cuda'.",
     )
+    parser.add_argument(
+        "--slo_profile",
+        type=str,
+        default="quality_first",
+        help="Name of SLO profile to use (e.g., 'quality_first', 'cheap').",
+    )
     args = parser.parse_args()
 
     examples = load_squad2_qa(args.squad_path)
@@ -243,7 +257,7 @@ def main() -> None:
 
     embedder = lambda q: deterministic_embed(q, dim=128)
     state_encoder = StateEncoder(embedder=embedder, num_domains=1)
-    slo_vec = get_slo_vector("quality_first")
+    slo_vec = get_slo_vector(args.slo_profile)
     slo_weights = slo_vector_to_weights(slo_vec)
     env = RagEnvironment(retriever=retriever, llm_client=llm_client, slo_weights=slo_weights)
 
@@ -264,7 +278,7 @@ def main() -> None:
     )
     trainer.load(args.model_path)
 
-    learned_metrics = evaluate_policy(
+    learned_metrics, action_counts = evaluate_policy(
         examples=examples,
         env=env,
         state_encoder=state_encoder,
@@ -280,6 +294,21 @@ def main() -> None:
     print("\n=== Learned Policy ===")
     for k, v in learned_metrics.items():
         print(f"{k}: {v:.4f}")
+    print("\n=== Learned Policy Action Distribution ===")
+    total_actions = sum(action_counts.values()) or 1
+    for action_id in sorted(action_counts.keys()):
+        count = action_counts[action_id]
+        frac = count / total_actions
+        cfg = ACTIONS.get(action_id)
+        if cfg is not None:
+            print(
+                f"action_id={action_id} (k={cfg.k}, mode={cfg.answer_mode}): "
+                f"count={count}, frac={frac:.3f}"
+            )
+        else:
+            print(
+                f"action_id={action_id}: count={count}, frac={frac:.3f}"
+            )
 
 
 if __name__ == "__main__":

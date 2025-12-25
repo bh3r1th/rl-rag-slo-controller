@@ -8,6 +8,10 @@ from rl_rag_slo.retrievers.bm25_retriever import BM25Retriever
 from rl_rag_slo.llm_backend.llm_client import OpenAILLMClient
 from rl_rag_slo.controller.state_encoder import StateEncoder
 from rl_rag_slo.controller.slo_profiles import get_slo_vector
+from rl_rag_slo.controller.feature_utils import (
+    compute_question_features,
+    compute_bm25_features,
+)
 from rl_rag_slo.env.rag_env import RagEnvironment
 from rl_rag_slo.controller.actions import ACTIONS
 from rl_rag_slo.llm_backend.embedding_client import DeterministicHashEmbedder
@@ -101,12 +105,16 @@ def main() -> None:
         question = ex.question
         ground_truth = ex.answer_text
 
+        q_feats = compute_question_features(question)
+        bm_feats = compute_bm25_features(retriever, question, top_k=5)
+        extra_meta = {**q_feats, **bm_feats}
+
         # Encode state once per question (domain_id=0 for SQuAD)
         state = state_encoder.encode(
             question=question,
             domain_id=0,
             slo_vec=slo_vec,
-            extra_meta=None,
+            extra_meta=extra_meta,
         )
 
         for action_id in action_ids:
