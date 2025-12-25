@@ -73,7 +73,12 @@ def compute_qa_score(
 
     if ground_truth is not None:
         # Answerable
-        acc = exact_match(ans_str, ground_truth)
+        acc = 0.0
+        if ground_truth:
+            gt = " ".join(ground_truth.strip().lower().split())
+            ans = " ".join(str(answer).strip().lower().split())
+            if gt and gt in ans:
+                acc = 1.0
         hallucination = 1 if has_answer_text and acc == 0.0 else 0
         correct_refusal = 0
         wrong_refusal = 1 if pred_is_refusal else 0

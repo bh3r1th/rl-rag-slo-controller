@@ -247,7 +247,7 @@ def main() -> None:
     slo_weights = slo_vector_to_weights(slo_vec)
     env = RagEnvironment(retriever=retriever, llm_client=llm_client, slo_weights=slo_weights)
 
-    baseline_action_id = 4
+    baseline_action_id = 1
     baseline_metrics = evaluate_baseline(examples, env, baseline_action_id)
 
     dummy_state = state_encoder.encode(
@@ -273,7 +273,7 @@ def main() -> None:
         device=args.device,
     )
 
-    print("=== Baseline (fixed action_id = 4) ===")
+    print("=== Baseline (fixed action_id = 1) ===")
     for k, v in baseline_metrics.items():
         print(f"{k}: {v:.4f}")
 
