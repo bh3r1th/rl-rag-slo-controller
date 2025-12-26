@@ -40,6 +40,7 @@ class RagEnvironment:
                 - "w_cost"
                 - "w_refusal"
                 - "w_halluc"
+                - "refusal_penalty"
                 - "lambda_cost"
                 - "lambda_halluc"
                 - "lambda_wrong_ref"
@@ -89,6 +90,8 @@ class RagEnvironment:
                 cost_tokens=cost_tokens,
                 extra_eval=extra_eval,
             )
+            if action_id == 4:
+                reward -= float(self.slo.get("refusal_penalty", 0.0))
             return RagStepResult(
                 answer=answer,
                 reward=reward,
@@ -119,6 +122,8 @@ class RagEnvironment:
             cost_tokens=cost_tokens,
             extra_eval=extra_eval,
         )
+        if action_id == 4:
+            reward -= float(self.slo.get("refusal_penalty", 0.0))
 
         meta: Dict[str, Any] = {
             "k": cfg.k,

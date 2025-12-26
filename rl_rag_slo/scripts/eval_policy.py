@@ -8,7 +8,7 @@ from rl_rag_slo.datasets.squad2_loader import load_squad2_qa, build_squad2_corpu
 from rl_rag_slo.retrievers.bm25_retriever import BM25Retriever
 from rl_rag_slo.llm_backend.llm_client import DummyLLMClient, OpenAILLMClient
 from rl_rag_slo.controller.state_encoder import StateEncoder
-from rl_rag_slo.controller.slo_profiles import get_slo_vector
+from rl_rag_slo.slo.slo_config import get_slo_vector, weights_for_profile
 from rl_rag_slo.controller.feature_utils import (
     compute_question_features,
     compute_bm25_features,
@@ -35,16 +35,6 @@ def deterministic_embed(question: str, dim: int = 128) -> np.ndarray:
     return rng.normal(loc=0.0, scale=1.0, size=(dim,)).astype(np.float32)
 
 
-def slo_vector_to_weights(vec: np.ndarray) -> dict:
-    v = vec.astype(np.float32)
-    return {
-        "w_quality": float(v[0]),
-        "w_cost": float(v[1]),
-        "w_refusal": float(v[2]),
-        "w_halluc": float(v[3]),
-    }
-
-
 def evaluate_policy(
     examples,
     env: RagEnvironment,
@@ -52,6 +42,7 @@ def evaluate_policy(
     slo_vec: np.ndarray,
     policy_trainer: BanditTrainer,
     device: str,
+    max_refusal_frac: float | None,
 ) -> Dict[str, float]:
     """
     Evaluate the learned policy on a list of QA examples.
@@ -75,6 +66,10 @@ def evaluate_policy(
     policy = policy_trainer.policy.to(device)
     policy.eval()
 
+    refusals_so_far = 0
+    overrides = 0
+    t = 0
+
     for ex in examples:
         q_feats = compute_question_features(ex.question)
         bm_feats = compute_bm25_features(env.retriever, ex.question, top_k=5)
@@ -92,6 +87,14 @@ def evaluate_policy(
         with torch.no_grad():
             action_id_tensor = policy.act(state_tensor)
         action_id = int(action_id_tensor.item())
+        t += 1
+        if max_refusal_frac is not None and action_id == 4:
+            current_frac = refusals_so_far / max(1, t - 1)
+            if current_frac >= max_refusal_frac:
+                action_id = 0
+                overrides += 1
+            else:
+                refusals_so_far += 1
         action_counts[action_id] += 1
 
         step_result = env.step(
@@ -136,7 +139,89 @@ def evaluate_policy(
             "retrieval_hit_rate": total_retrieval_hit / n,
         }
 
-    return metrics, dict(action_counts)
+    return metrics, dict(action_counts), overrides
+
+
+def evaluate_fixed_action(
+    action_id: int,
+    examples,
+    env: RagEnvironment,
+    state_encoder: StateEncoder,
+    slo_vec: np.ndarray,
+) -> Dict[str, float]:
+    """
+    Evaluate a fixed action on a list of QA examples.
+
+    Returns aggregated metrics:
+      - avg_accuracy
+      - avg_cost_tokens
+      - hallucination_rate
+      - refusal_rate
+      - avg_reward
+      - retrieval_hit_rate
+    """
+    from rl_rag_slo.llm_backend.answer_scorer import compute_qa_score as _compute
+
+    total_acc = 0.0
+    total_cost = 0.0
+    total_halluc = 0
+    total_refusal = 0
+    total_reward = 0.0
+    total_retrieval_hit = 0
+    n = 0
+
+    for ex in examples:
+        q_feats = compute_question_features(ex.question)
+        bm_feats = compute_bm25_features(env.retriever, ex.question, top_k=5)
+        extra_meta = {**q_feats, **bm_feats}
+
+        state_encoder.encode(
+            question=ex.question,
+            domain_id=0,
+            slo_vec=slo_vec,
+            extra_meta=extra_meta,
+        )
+        step_result = env.step(
+            question=ex.question,
+            ground_truth=ex.answer_text,
+            action_id=action_id,
+            extra_eval=None,
+        )
+        metrics = _compute(
+            answer=step_result.answer,
+            ground_truth=ex.answer_text,
+            extra_eval=None,
+        )
+        total_acc += float(metrics.get("accuracy", 0.0))
+        total_cost += float(step_result.cost_tokens)
+        total_halluc += int(metrics.get("hallucination", 0))
+        total_refusal += int(metrics.get("correct_refusal", 0)) + int(
+            metrics.get("wrong_refusal", 0)
+        )
+
+        total_reward += float(step_result.reward)
+        total_retrieval_hit += int(step_result.meta.get("retrieval_hit", 0))
+
+        n += 1
+
+    if n == 0:
+        return {
+            "avg_accuracy": 0.0,
+            "avg_cost_tokens": 0.0,
+            "hallucination_rate": 0.0,
+            "refusal_rate": 0.0,
+            "avg_reward": 0.0,
+            "retrieval_hit_rate": 0.0,
+        }
+
+    return {
+        "avg_accuracy": total_acc / n,
+        "avg_cost_tokens": total_cost / n,
+        "hallucination_rate": total_halluc / n,
+        "refusal_rate": total_refusal / n,
+        "avg_reward": total_reward / n,
+        "retrieval_hit_rate": total_retrieval_hit / n,
+    }
 
 
 def evaluate_baseline(
@@ -243,6 +328,12 @@ def main() -> None:
         default="quality_first",
         help="Name of SLO profile to use (e.g., 'quality_first', 'cheap').",
     )
+    parser.add_argument(
+        "--max_refusal_frac",
+        type=float,
+        default=None,
+        help="Maximum allowed refusal fraction; overrides refusal action when exceeded.",
+    )
     args = parser.parse_args()
 
     examples = load_squad2_qa(args.squad_path)
@@ -258,7 +349,7 @@ def main() -> None:
     embedder = lambda q: deterministic_embed(q, dim=128)
     state_encoder = StateEncoder(embedder=embedder, num_domains=1)
     slo_vec = get_slo_vector(args.slo_profile)
-    slo_weights = slo_vector_to_weights(slo_vec)
+    slo_weights = weights_for_profile(args.slo_profile)
     env = RagEnvironment(retriever=retriever, llm_client=llm_client, slo_weights=slo_weights)
 
     baseline_action_id = 1
@@ -278,18 +369,49 @@ def main() -> None:
     )
     trainer.load(args.model_path)
 
-    learned_metrics, action_counts = evaluate_policy(
+    learned_metrics, action_counts, refusal_overrides = evaluate_policy(
         examples=examples,
         env=env,
         state_encoder=state_encoder,
         slo_vec=slo_vec,
         policy_trainer=trainer,
         device=args.device,
+        max_refusal_frac=args.max_refusal_frac,
     )
 
     print("=== Baseline (fixed action_id = 1) ===")
     for k, v in baseline_metrics.items():
         print(f"{k}: {v:.4f}")
+
+    best_action_id = None
+    best_metrics = None
+    best_reward = None
+    for action_id in sorted(ACTIONS.keys()):
+        metrics = evaluate_fixed_action(
+            action_id=action_id,
+            examples=examples,
+            env=env,
+            state_encoder=state_encoder,
+            slo_vec=slo_vec,
+        )
+        avg_reward = float(metrics.get("avg_reward", 0.0))
+        if best_reward is None or avg_reward > best_reward:
+            best_reward = avg_reward
+            best_action_id = action_id
+            best_metrics = metrics
+
+    print("\n=== Best Fixed Action Baseline (by avg_reward) ===")
+    if best_action_id is not None:
+        cfg = ACTIONS.get(best_action_id)
+        if cfg is not None:
+            print(
+                f"best_action_id={best_action_id} (k={cfg.k}, mode={cfg.answer_mode})"
+            )
+        else:
+            print(f"best_action_id={best_action_id}")
+    if best_metrics is not None:
+        for k, v in best_metrics.items():
+            print(f"{k}: {v:.4f}")
 
     print("\n=== Learned Policy ===")
     for k, v in learned_metrics.items():
@@ -309,6 +431,7 @@ def main() -> None:
             print(
                 f"action_id={action_id}: count={count}, frac={frac:.3f}"
             )
+    print(f"\nrefusal_overrides: {refusal_overrides}")
 
 
 if __name__ == "__main__":

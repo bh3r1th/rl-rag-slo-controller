@@ -3,7 +3,7 @@ import argparse
 import numpy as np
 
 from rl_rag_slo.controller.actions import ACTIONS
-from rl_rag_slo.controller.slo_profiles import get_slo_vector
+from rl_rag_slo.slo.slo_config import get_slo_vector, slo_vector_to_weights
 from rl_rag_slo.controller.state_encoder import StateEncoder
 from rl_rag_slo.datasets.squad2_loader import build_squad2_corpus, load_squad2_qa
 from rl_rag_slo.env.rag_env import RagEnvironment
@@ -28,16 +28,6 @@ def deterministic_embed(question: str, dim: int = 128) -> np.ndarray:
     return rng.normal(loc=0.0, scale=1.0, size=(dim,)).astype(np.float32)
 
 
-def slo_vector_to_weights(vec: np.ndarray) -> dict:
-    v = vec.astype(np.float32)
-    return {
-        "w_quality": float(v[0]),
-        "w_cost": float(v[1]),
-        "w_refusal": float(v[2]),
-        "w_halluc": float(v[3]),
-    }
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Smoke test for RL RAG environment with DummyLLMClient."
@@ -60,7 +50,7 @@ def main() -> None:
 
     embedder = lambda q: deterministic_embed(q, dim=128)
     state_encoder = StateEncoder(embedder=embedder, num_domains=1)
-    slo_vec = get_slo_vector("balanced")
+    slo_vec = get_slo_vector("quality_first")
     slo_weights = slo_vector_to_weights(slo_vec)
     env = RagEnvironment(retriever=retriever, llm_client=llm_client, slo_weights=slo_weights)
 

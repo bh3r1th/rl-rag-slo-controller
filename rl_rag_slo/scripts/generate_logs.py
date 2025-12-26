@@ -5,7 +5,7 @@ from typing import Tuple
 import numpy as np
 
 from rl_rag_slo.controller.actions import ACTIONS
-from rl_rag_slo.controller.slo_profiles import get_slo_vector
+from rl_rag_slo.slo.slo_config import get_slo_vector, slo_vector_to_weights
 from rl_rag_slo.controller.state_encoder import StateEncoder
 from rl_rag_slo.datasets.squad2_loader import QAExample, build_squad2_corpus, load_squad2_qa
 from rl_rag_slo.env.rag_env import RagEnvironment
@@ -27,20 +27,6 @@ def deterministic_embed(question: str, dim: int = 128) -> np.ndarray:
     seed = raw_seed % (2**32 - 1)
     rng = np.random.RandomState(seed)
     return rng.normal(loc=0.0, scale=1.0, size=(dim,)).astype(np.float32)
-
-
-def slo_vector_to_weights(vec: np.ndarray) -> dict:
-    """
-    Convert a 4D SLO vector [w_quality, w_cost, w_refusal, w_halluc] into a dict
-    suitable for RagEnvironment.
-    """
-    v = vec.astype(np.float32)
-    return {
-        "w_quality": float(v[0]),
-        "w_cost": float(v[1]),
-        "w_refusal": float(v[2]),
-        "w_halluc": float(v[3]),
-    }
 
 
 def main() -> None:

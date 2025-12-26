@@ -33,7 +33,7 @@ class StateEncoder:
         """
         q_emb = self.embedder(question).astype(np.float32)
         domain_one_hot = self._domain_one_hot(domain_id)
-        slo_vec = slo_vec.astype(np.float32)
+        slo_scaled = slo_vec.astype(np.float32) * 5.0
 
         meta = extra_meta or {}
         q_len_tokens = int(meta.get("q_len_tokens", 0) or 0)
@@ -56,7 +56,7 @@ class StateEncoder:
         )
 
         state = np.concatenate(
-            [q_emb, domain_one_hot, slo_vec, extra_features], axis=0
+            [q_emb, domain_one_hot, slo_scaled, extra_features], axis=0
         ).astype(np.float32)
         return state
 

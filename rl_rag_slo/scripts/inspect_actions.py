@@ -1,30 +1,14 @@
 import argparse
 
-import numpy as np
-
 from rl_rag_slo.datasets.squad2_loader import load_squad2_qa, build_squad2_corpus
 from rl_rag_slo.retrievers.bm25_retriever import BM25Retriever
 from rl_rag_slo.llm_backend.llm_client import OpenAILLMClient
-from rl_rag_slo.controller.slo_profiles import get_slo_vector
+from rl_rag_slo.slo.slo_config import get_slo_vector, weights_for_profile
 from rl_rag_slo.env.rag_env import RagEnvironment
 from rl_rag_slo.controller.actions import ACTIONS
 from rl_rag_slo.llm_backend.embedding_client import DeterministicHashEmbedder
 from rl_rag_slo.controller.state_encoder import StateEncoder
 from rl_rag_slo.llm_backend.answer_scorer import compute_qa_score
-
-
-def slo_vector_to_weights(vec: np.ndarray):
-    v = vec.astype(np.float32)
-    return {
-        "w_quality": float(v[0]),
-        "w_cost": float(v[1]),
-        "w_refusal": float(v[2]),
-        "w_halluc": float(v[3]),
-        "lambda_cost": 1e-3,
-        "lambda_halluc": 1.0,
-        "lambda_wrong_ref": 1.0,
-        "lambda_correct_ref": 1.0,
-    }
 
 
 def evaluate_fixed_action(examples, env: RagEnvironment, action_id: int):
@@ -108,7 +92,7 @@ def main() -> None:
     llm_client = OpenAILLMClient()
 
     slo_vec = get_slo_vector(args.slo_profile)
-    slo_weights = slo_vector_to_weights(slo_vec)
+    slo_weights = weights_for_profile(args.slo_profile)
     env = RagEnvironment(retriever=retriever, llm_client=llm_client, slo_weights=slo_weights)
 
     print(f"Evaluating {len(examples)} examples under SLO profile '{args.slo_profile}'")

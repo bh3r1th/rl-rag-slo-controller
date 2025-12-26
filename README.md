@@ -203,6 +203,52 @@ The goal is to see whether the learned policy finds better quality/cost/hallucin
 
 ---
 
+## Multi-SLO Replay (One Policy, Multiple SLOs)
+
+Use the multi-SLO replay script to train a single SLO-conditioned policy, then evaluate it under different SLOs.
+
+Precompute replay with both SLOs:
+
+    python -m rl_rag_slo.scripts.precompute_replay_multi_slo `
+      --squad_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\rl_rag_slo\datasets\SQuAD\train-v2.0.json" `
+      --output_path "replay_squad2_multi.npz" `
+      --num_examples 1000 `
+      --slo_profiles "quality_first,cheap"
+
+Train one policy:
+
+    python -m rl_rag_slo.scripts.train_policy `
+      --replay_path "replay_squad2_multi.npz" `
+      --output_path "policy_squad2_multi.pt" `
+      --epochs 10 `
+      --batch_size 128 `
+      --device cpu
+
+Evaluate the same policy under different SLOs:
+
+    # Quality-first evaluation
+    python -m rl_rag_slo.scripts.eval_policy `
+      --model_path "policy_squad2_multi.pt" `
+      --squad_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\rl_rag_slo\datasets\SQuAD\dev-v2.0.json" `
+      --num_examples 200 `
+      --device cpu `
+      --slo_profile quality_first
+
+    # Cheap evaluation
+    python -m rl_rag_slo.scripts.eval_policy `
+      --model_path "policy_squad2_multi.pt" `
+      --squad_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\rl_rag_slo\datasets\SQuAD\dev-v2.0.json" `
+      --num_examples 200 `
+      --device cpu `
+      --slo_profile cheap
+
+Success looks like:
+
+- the action distribution should differ across SLOs
+- reward should be higher under the matching SLO than naive fixed baselines
+
+---
+
 ## LLM and Embedding Backends
 
 By default, the scripts are configured to avoid external dependencies:
