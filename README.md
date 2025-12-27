@@ -85,6 +85,43 @@ Notes:
 
 ---
 
+## Reproducibility
+
+Environment setup:
+
+- Recommended Python version: 3.10+
+- Install dependencies: `pip install -r requirements.txt` (if present) or `pip install -e .`
+- If you use the OpenAI backend, set `OPENAI_API_KEY` in your environment
+
+Dataset note:
+
+- You must download SQuAD v2.0 JSON files and pass the train/dev paths explicitly.
+
+Main pipeline (copy/paste):
+
+```bash
+python -m rl_rag_slo.scripts.precompute_replay_multi_slo --squad_path <PATH_TO_TRAIN_V2_JSON> --output_path replay_squad2_multi.npz --num_examples 1000 --slo_profiles "quality_first,cheap"
+
+python -m rl_rag_slo.scripts.train_policy --replay_path replay_squad2_multi.npz --output_path policy_squad2_multi_argmax.pt --epochs 10 --batch_size 128 --device cpu --objective argmax_ce
+
+mkdir -p results
+python -m rl_rag_slo.scripts.eval_policy --model_path policy_squad2_multi_argmax.pt --squad_path <PATH_TO_DEV_V2_JSON> --num_examples 200 --device cpu --slo_profile quality_first --output_json results/quality_first_argmax.json
+python -m rl_rag_slo.scripts.eval_policy --model_path policy_squad2_multi_argmax.pt --squad_path <PATH_TO_DEV_V2_JSON> --num_examples 200 --device cpu --slo_profile cheap --output_json results/cheap_argmax.json
+
+python -m rl_rag_slo.scripts.make_figures --inputs results/quality_first_argmax.json results/cheap_argmax.json --out_dir results
+```
+
+Expected outputs:
+
+- `results/summary.csv`
+- `results/action_distribution.png`
+- `results/cost_vs_accuracy.png`
+- `results/reward_vs_baseline.png`
+
+Note: Runs can be slow due to LLM calls.
+
+---
+
 ## Datasets
 
 ### SQuAD 2.0

@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+title: "SLO-Conditioned Action Routing for Retrieval-Augmented Generation"
+authors:
+  - family-names: Nunepalli
+    given-names: Bharath
+year: 2025
+url: "https://github.com/bh3r1th/rl-rag-slo-controller"
+license: MIT
+preferred-citation:
+  type: article
+  title: "SLO-Conditioned Action Routing for Retrieval-Augmented Generation: Objective Ablation and Failure Modes"
+  authors:
+    - family-names: Nunepalli
+      given-names: Bharath
+  year: 2025
+  notes: "arXiv preprint (add identifier after upload)."

@@ -1,6 +1,29 @@
-# results/
-# *.pt
-# *.npz
-# __pycache__/
-# .pytest_cache/
-# *.log
+# Python
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+env/
+.env
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+
+# Project generated artifacts
+# Replay buffers, policies, and results are generated outputs.
+*.npz
+*.pt
+results/
+outputs/
+logs/
+wandb/
+mlruns/
+*.log
