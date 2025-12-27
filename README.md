@@ -271,6 +271,94 @@ Be aware that using real models introduces **latency** and **cost**, so start sm
 
 ---
 
+## Paper/Blog Results Reproduction (Fast)
+
+Run evaluation with JSON output for both SLOs and both policies, then generate plots.
+
+Windows example (PowerShell):
+
+    python -m rl_rag_slo.scripts.eval_policy `
+      --model_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\policy_squad2_multi_argmax.pt" `
+      --squad_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\rl_rag_slo\datasets\SQuAD\dev-v2.0.json" `
+      --num_examples 200 `
+      --device cpu `
+      --slo_profile quality_first `
+      --output_json "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results\eval_argmax_quality_first.json"
+
+    python -m rl_rag_slo.scripts.eval_policy `
+      --model_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\policy_squad2_multi_argmax.pt" `
+      --squad_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\rl_rag_slo\datasets\SQuAD\dev-v2.0.json" `
+      --num_examples 200 `
+      --device cpu `
+      --slo_profile cheap `
+      --output_json "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results\eval_argmax_cheap.json"
+
+    python -m rl_rag_slo.scripts.eval_policy `
+      --model_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\policy_squad2_multi_argmax_wt.pt" `
+      --squad_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\rl_rag_slo\datasets\SQuAD\dev-v2.0.json" `
+      --num_examples 200 `
+      --device cpu `
+      --slo_profile quality_first `
+      --output_json "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results\eval_argmax_wt_quality_first.json"
+
+    python -m rl_rag_slo.scripts.eval_policy `
+      --model_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\policy_squad2_multi_argmax_wt.pt" `
+      --squad_path "C:\Users\vanda\OneDrive\Desktop\RL-RAG\rl_rag_slo\datasets\SQuAD\dev-v2.0.json" `
+      --num_examples 200 `
+      --device cpu `
+      --slo_profile cheap `
+      --output_json "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results\eval_argmax_wt_cheap.json"
+
+    python -m rl_rag_slo.scripts.make_figures `
+      --inputs "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results\eval_argmax_quality_first.json" `
+               "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results\eval_argmax_cheap.json" `
+               "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results\eval_argmax_wt_quality_first.json" `
+               "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results\eval_argmax_wt_cheap.json" `
+      --out_dir "C:\Users\vanda\OneDrive\Desktop\RL-RAG\results"
+
+Generic paths:
+
+    python -m rl_rag_slo.scripts.eval_policy \
+      --model_path /path/to/policy_squad2_multi_argmax.pt \
+      --squad_path /path/to/dev-v2.0.json \
+      --num_examples 200 \
+      --device cpu \
+      --slo_profile quality_first \
+      --output_json /path/to/results/eval_argmax_quality_first.json
+
+    python -m rl_rag_slo.scripts.eval_policy \
+      --model_path /path/to/policy_squad2_multi_argmax.pt \
+      --squad_path /path/to/dev-v2.0.json \
+      --num_examples 200 \
+      --device cpu \
+      --slo_profile cheap \
+      --output_json /path/to/results/eval_argmax_cheap.json
+
+    python -m rl_rag_slo.scripts.eval_policy \
+      --model_path /path/to/policy_squad2_multi_argmax_wt.pt \
+      --squad_path /path/to/dev-v2.0.json \
+      --num_examples 200 \
+      --device cpu \
+      --slo_profile quality_first \
+      --output_json /path/to/results/eval_argmax_wt_quality_first.json
+
+    python -m rl_rag_slo.scripts.eval_policy \
+      --model_path /path/to/policy_squad2_multi_argmax_wt.pt \
+      --squad_path /path/to/dev-v2.0.json \
+      --num_examples 200 \
+      --device cpu \
+      --slo_profile cheap \
+      --output_json /path/to/results/eval_argmax_wt_cheap.json
+
+    python -m rl_rag_slo.scripts.make_figures \
+      --inputs /path/to/results/eval_argmax_quality_first.json \
+               /path/to/results/eval_argmax_cheap.json \
+               /path/to/results/eval_argmax_wt_quality_first.json \
+               /path/to/results/eval_argmax_wt_cheap.json \
+      --out_dir /path/to/results
+
+---
+
 ## Next Steps / TODO
 
 Planned extensions (useful for a paper roadmap):

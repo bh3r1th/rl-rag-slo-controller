@@ -101,14 +101,31 @@ def main() -> None:
             raise RuntimeError("No samples to train after truncation.")
 
         b = n // block_size
-        states_block = states_np[0:n:5]
-        actions_block = actions_np.reshape(b, block_size)
-        rewards_block = rewards_np.reshape(b, block_size)
-        best_j = np.argmax(rewards_block, axis=1)
-        best_val = rewards_block[np.arange(b), best_j]
-        second_best_val = np.partition(rewards_block, -2, axis=1)[:, -2]
+        x_block = states_np[0:n:5]
+        a_block = actions_np.reshape(b, block_size)
+        r_block = rewards_np.reshape(b, block_size)
+
+        state_dim = int(x_block.shape[1])
+        slo_len = 4
+        extra_len = 11
+        slo_start = state_dim - (slo_len + extra_len)
+        slo_end = slo_start + slo_len
+        slo = x_block[:, slo_start:slo_end]
+        is_quality = (slo[:, 0] > slo[:, 1]) & (slo[:, 0] > slo[:, 2])
+        is_cheap = ~is_quality
+
+        best_before = a_block[np.arange(b), np.argmax(r_block, axis=1)]
+        count_refuse_best_before = int(np.sum((best_before == 4) & is_cheap))
+
+        mask = (a_block == 4) & is_cheap[:, None]
+        r_masked = r_block.copy()
+        r_masked[mask] = -1e9
+
+        best_j = np.argmax(r_masked, axis=1)
+        best_val = r_masked[np.arange(b), best_j]
+        second_best_val = np.partition(r_masked, -2, axis=1)[:, -2]
         margin = (best_val - second_best_val).astype(np.float32)
-        best_action = actions_block[np.arange(b), best_j]
+        best_action = a_block[np.arange(b), best_j]
 
         print(
             "Margin stats: "
@@ -118,6 +135,14 @@ def main() -> None:
         )
 
         print(f"Blocks: B={b}, state_dim={state_dim}, num_actions={num_actions}")
+        print(
+            f"Cheap blocks: {int(np.sum(is_cheap))}, "
+            f"Quality blocks: {int(np.sum(is_quality))}"
+        )
+        print(
+            "Cheap blocks where refuse would be best BEFORE masking: "
+            f"{count_refuse_best_before}"
+        )
 
         device = torch.device(args.device)
         trainer = BanditTrainer(
@@ -132,7 +157,7 @@ def main() -> None:
         weights = np.clip(weights, 0.0, 10.0).astype(np.float32)
         criterion = nn.CrossEntropyLoss(reduction="none")
 
-        states_tensor = torch.from_numpy(states_block).to(device)
+        states_tensor = torch.from_numpy(x_block).to(device)
         best_action_tensor = torch.from_numpy(best_action.astype(np.int64)).to(device)
         weights_tensor = torch.from_numpy(weights).to(device)
 

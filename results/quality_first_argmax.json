@@ -1,0 +1,75 @@
+{
+  "meta": {
+    "timestamp_utc": "2025-12-26T23:46:55.236997Z",
+    "model_path": "policy_squad2_multi_argmax.pt",
+    "squad_path": "C:\\Users\\vanda\\OneDrive\\Desktop\\RL-RAG\\rl_rag_slo\\datasets\\SQuAD\\dev-v2.0.json",
+    "num_examples": 200,
+    "device": "cpu",
+    "slo_profile": "quality_first",
+    "max_refusal_frac": null
+  },
+  "baseline_fixed_action_id_1": {
+    "action_id": 1,
+    "action_spec": {
+      "k": 5,
+      "mode": "guarded"
+    },
+    "metrics": {
+      "avg_accuracy": 0.3,
+      "avg_cost_tokens": 609.245,
+      "hallucination_rate": 0.515,
+      "refusal_rate": 0.285,
+      "avg_reward": -0.05784900000000003,
+      "retrieval_hit_rate": 0.7582417582417582
+    }
+  },
+  "best_fixed_action_baseline": {
+    "best_action_id": 0,
+    "action_spec": {
+      "k": 2,
+      "mode": "guarded"
+    },
+    "metrics": {
+      "avg_accuracy": 0.25,
+      "avg_cost_tokens": 244.36,
+      "hallucination_rate": 0.575,
+      "refusal_rate": 0.305,
+      "avg_reward": -0.041872,
+      "retrieval_hit_rate": 0.6593406593406593
+    }
+  },
+  "learned_policy": {
+    "metrics": {
+      "avg_accuracy": 0.275,
+      "avg_cost_tokens": 358.56,
+      "hallucination_rate": 0.53,
+      "refusal_rate": 0.295,
+      "avg_reward": -0.028711999999999963,
+      "retrieval_hit_rate": 0.6813186813186813
+    },
+    "action_distribution": [
+      {
+        "action_id": 0,
+        "k": 2,
+        "mode": "guarded",
+        "count": 139,
+        "frac": 0.695
+      },
+      {
+        "action_id": 1,
+        "k": 5,
+        "mode": "guarded",
+        "count": 29,
+        "frac": 0.145
+      },
+      {
+        "action_id": 3,
+        "k": 5,
+        "mode": "auto",
+        "count": 32,
+        "frac": 0.16
+      }
+    ],
+    "refusal_overrides": 0
+  }
+}

@@ -1,0 +1,6 @@
+# results/
+# *.pt
+# *.npz
+# __pycache__/
+# .pytest_cache/
+# *.log

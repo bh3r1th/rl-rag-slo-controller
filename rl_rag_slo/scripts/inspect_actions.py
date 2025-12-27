@@ -9,6 +9,10 @@ from rl_rag_slo.controller.actions import ACTIONS
 from rl_rag_slo.llm_backend.embedding_client import DeterministicHashEmbedder
 from rl_rag_slo.controller.state_encoder import StateEncoder
 from rl_rag_slo.llm_backend.answer_scorer import compute_qa_score
+from rl_rag_slo.metrics.retrieval_hit import (
+    compute_retrieval_hit,
+    compute_retrieval_hit_rate,
+)
 
 
 def evaluate_fixed_action(examples, env: RagEnvironment, action_id: int):
@@ -18,8 +22,24 @@ def evaluate_fixed_action(examples, env: RagEnvironment, action_id: int):
     total_refusal = 0
     total_reward = 0.0
     n = 0
+    answerable_flags = []
+    retrieval_hits = []
+
+    cfg = ACTIONS.get(action_id)
 
     for ex in examples:
+        if cfg is None or cfg.answer_mode == "refuse" or cfg.k == 0:
+            retrieved_texts = []
+        else:
+            docs = env.retriever.retrieve(ex.question, top_k=cfg.k)
+            retrieved_texts = [doc.get("text", "") for doc in docs]
+
+        gold_answers = [ex.answer_text] if ex.answer_text else []
+        answerable = any(ans.strip() for ans in gold_answers)
+        hit = compute_retrieval_hit(gold_answers, retrieved_texts)
+        answerable_flags.append(answerable)
+        retrieval_hits.append(hit)
+
         step_result = env.step(
             question=ex.question,
             ground_truth=ex.answer_text,
@@ -38,6 +58,7 @@ def evaluate_fixed_action(examples, env: RagEnvironment, action_id: int):
         total_reward += float(step_result.reward)
         n += 1
 
+    retrieval_hit_rate = compute_retrieval_hit_rate(answerable_flags, retrieval_hits)
     if n == 0:
         return {
             "avg_accuracy": 0.0,
@@ -45,6 +66,7 @@ def evaluate_fixed_action(examples, env: RagEnvironment, action_id: int):
             "hallucination_rate": 0.0,
             "refusal_rate": 0.0,
             "avg_reward": 0.0,
+            "retrieval_hit_rate": 0.0,
         }
 
     return {
@@ -53,6 +75,7 @@ def evaluate_fixed_action(examples, env: RagEnvironment, action_id: int):
         "hallucination_rate": total_halluc / n,
         "refusal_rate": total_refusal / n,
         "avg_reward": total_reward / n,
+        "retrieval_hit_rate": retrieval_hit_rate,
     }
 
 

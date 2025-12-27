@@ -1,4 +1,7 @@
 import argparse
+import datetime
+import json
+import time
 from typing import Dict
 
 import numpy as np
@@ -17,6 +20,10 @@ from rl_rag_slo.env.rag_env import RagEnvironment
 from rl_rag_slo.controller.bandit_trainer import BanditTrainer
 from rl_rag_slo.controller.actions import ACTIONS
 from rl_rag_slo.llm_backend.answer_scorer import compute_qa_score
+from rl_rag_slo.metrics.retrieval_hit import (
+    compute_retrieval_hit,
+    compute_retrieval_hit_rate,
+)
 
 
 def deterministic_embed(question: str, dim: int = 128) -> np.ndarray:
@@ -58,10 +65,11 @@ def evaluate_policy(
     total_halluc = 0
     total_refusal = 0
     total_reward = 0.0
-    total_retrieval_hit = 0
     n = 0
 
     action_counts = collections.Counter()
+    answerable_flags = []
+    retrieval_hits = []
 
     policy = policy_trainer.policy.to(device)
     policy.eval()
@@ -97,6 +105,19 @@ def evaluate_policy(
                 refusals_so_far += 1
         action_counts[action_id] += 1
 
+        cfg = ACTIONS.get(action_id)
+        if cfg is None or cfg.answer_mode == "refuse" or cfg.k == 0:
+            retrieved_texts = []
+        else:
+            docs = env.retriever.retrieve(ex.question, top_k=cfg.k)
+            retrieved_texts = [doc.get("text", "") for doc in docs]
+
+        gold_answers = [ex.answer_text] if ex.answer_text else []
+        answerable = any(ans.strip() for ans in gold_answers)
+        hit = compute_retrieval_hit(gold_answers, retrieved_texts)
+        answerable_flags.append(answerable)
+        retrieval_hits.append(hit)
+
         step_result = env.step(
             question=ex.question,
             ground_truth=ex.answer_text,
@@ -116,10 +137,10 @@ def evaluate_policy(
         # refusal if is_refusal() inside metrics (correct_refusal or wrong_refusal)
         total_refusal += int(metrics.get("correct_refusal", 0)) + int(metrics.get("wrong_refusal", 0))
         total_reward += float(step_result.reward)
-        total_retrieval_hit += int(step_result.meta.get("retrieval_hit", 0)) if isinstance(step_result.meta, dict) else 0
 
         n += 1
 
+    retrieval_hit_rate = compute_retrieval_hit_rate(answerable_flags, retrieval_hits)
     if n == 0:
         metrics = {
             "avg_accuracy": 0.0,
@@ -136,7 +157,7 @@ def evaluate_policy(
             "hallucination_rate": total_halluc / n,
             "refusal_rate": total_refusal / n,
             "avg_reward": total_reward / n,
-            "retrieval_hit_rate": total_retrieval_hit / n,
+            "retrieval_hit_rate": retrieval_hit_rate,
         }
 
     return metrics, dict(action_counts), overrides
@@ -167,13 +188,28 @@ def evaluate_fixed_action(
     total_halluc = 0
     total_refusal = 0
     total_reward = 0.0
-    total_retrieval_hit = 0
     n = 0
+    answerable_flags = []
+    retrieval_hits = []
+
+    cfg = ACTIONS.get(action_id)
 
     for ex in examples:
         q_feats = compute_question_features(ex.question)
         bm_feats = compute_bm25_features(env.retriever, ex.question, top_k=5)
         extra_meta = {**q_feats, **bm_feats}
+
+        if cfg is None or cfg.answer_mode == "refuse" or cfg.k == 0:
+            retrieved_texts = []
+        else:
+            docs = env.retriever.retrieve(ex.question, top_k=cfg.k)
+            retrieved_texts = [doc.get("text", "") for doc in docs]
+
+        gold_answers = [ex.answer_text] if ex.answer_text else []
+        answerable = any(ans.strip() for ans in gold_answers)
+        hit = compute_retrieval_hit(gold_answers, retrieved_texts)
+        answerable_flags.append(answerable)
+        retrieval_hits.append(hit)
 
         state_encoder.encode(
             question=ex.question,
@@ -200,10 +236,10 @@ def evaluate_fixed_action(
         )
 
         total_reward += float(step_result.reward)
-        total_retrieval_hit += int(step_result.meta.get("retrieval_hit", 0))
 
         n += 1
 
+    retrieval_hit_rate = compute_retrieval_hit_rate(answerable_flags, retrieval_hits)
     if n == 0:
         return {
             "avg_accuracy": 0.0,
@@ -220,7 +256,7 @@ def evaluate_fixed_action(
         "hallucination_rate": total_halluc / n,
         "refusal_rate": total_refusal / n,
         "avg_reward": total_reward / n,
-        "retrieval_hit_rate": total_retrieval_hit / n,
+        "retrieval_hit_rate": retrieval_hit_rate,
     }
 
 
@@ -247,10 +283,25 @@ def evaluate_baseline(
     total_halluc = 0
     total_refusal = 0
     total_reward = 0.0
-    total_retrieval_hit = 0
     n = 0
+    answerable_flags = []
+    retrieval_hits = []
+
+    cfg = ACTIONS.get(baseline_action_id)
 
     for ex in examples:
+        if cfg is None or cfg.answer_mode == "refuse" or cfg.k == 0:
+            retrieved_texts = []
+        else:
+            docs = env.retriever.retrieve(ex.question, top_k=cfg.k)
+            retrieved_texts = [doc.get("text", "") for doc in docs]
+
+        gold_answers = [ex.answer_text] if ex.answer_text else []
+        answerable = any(ans.strip() for ans in gold_answers)
+        hit = compute_retrieval_hit(gold_answers, retrieved_texts)
+        answerable_flags.append(answerable)
+        retrieval_hits.append(hit)
+
         step_result = env.step(
             question=ex.question,
             ground_truth=ex.answer_text,
@@ -270,10 +321,10 @@ def evaluate_baseline(
         )
 
         total_reward += float(step_result.reward)
-        total_retrieval_hit += int(step_result.meta.get("retrieval_hit", 0))
 
         n += 1
 
+    retrieval_hit_rate = compute_retrieval_hit_rate(answerable_flags, retrieval_hits)
     if n == 0:
         return {
             "avg_accuracy": 0.0,
@@ -290,7 +341,7 @@ def evaluate_baseline(
         "hallucination_rate": total_halluc / n,
         "refusal_rate": total_refusal / n,
         "avg_reward": total_reward / n,
-        "retrieval_hit_rate": total_retrieval_hit / n,
+        "retrieval_hit_rate": retrieval_hit_rate,
     }
 
 
@@ -333,6 +384,12 @@ def main() -> None:
         type=float,
         default=None,
         help="Maximum allowed refusal fraction; overrides refusal action when exceeded.",
+    )
+    parser.add_argument(
+        "--output_json",
+        type=str,
+        default=None,
+        help="Optional path to write evaluation outputs as JSON.",
     )
     args = parser.parse_args()
 
@@ -382,6 +439,7 @@ def main() -> None:
     print("=== Baseline (fixed action_id = 1) ===")
     for k, v in baseline_metrics.items():
         print(f"{k}: {v:.4f}")
+    print("retrieval_hit_rate computed over answerable questions only")
 
     best_action_id = None
     best_metrics = None
@@ -412,10 +470,12 @@ def main() -> None:
     if best_metrics is not None:
         for k, v in best_metrics.items():
             print(f"{k}: {v:.4f}")
+        print("retrieval_hit_rate computed over answerable questions only")
 
     print("\n=== Learned Policy ===")
     for k, v in learned_metrics.items():
         print(f"{k}: {v:.4f}")
+    print("retrieval_hit_rate computed over answerable questions only")
     print("\n=== Learned Policy Action Distribution ===")
     total_actions = sum(action_counts.values()) or 1
     for action_id in sorted(action_counts.keys()):
@@ -432,6 +492,59 @@ def main() -> None:
                 f"action_id={action_id}: count={count}, frac={frac:.3f}"
             )
     print(f"\nrefusal_overrides: {refusal_overrides}")
+
+    if args.output_json:
+        baseline_cfg = ACTIONS.get(baseline_action_id)
+        best_cfg = ACTIONS.get(best_action_id) if best_action_id is not None else None
+        action_distribution = []
+        for action_id in sorted(action_counts.keys()):
+            cfg = ACTIONS.get(action_id)
+            action_distribution.append(
+                {
+                    "action_id": int(action_id),
+                    "k": int(cfg.k) if cfg is not None else None,
+                    "mode": cfg.answer_mode if cfg is not None else None,
+                    "count": int(action_counts[action_id]),
+                    "frac": float(action_counts[action_id] / total_actions),
+                }
+            )
+
+        output_payload = {
+            "meta": {
+                "timestamp_utc": datetime.datetime.now(datetime.timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "model_path": args.model_path,
+                "squad_path": args.squad_path,
+                "num_examples": int(len(examples)),
+                "device": args.device,
+                "slo_profile": args.slo_profile,
+                "max_refusal_frac": args.max_refusal_frac,
+            },
+            "baseline_fixed_action_id_1": {
+                "action_id": int(baseline_action_id),
+                "action_spec": {
+                    "k": int(baseline_cfg.k) if baseline_cfg is not None else None,
+                    "mode": baseline_cfg.answer_mode if baseline_cfg is not None else None,
+                },
+                "metrics": baseline_metrics,
+            },
+            "best_fixed_action_baseline": {
+                "best_action_id": int(best_action_id) if best_action_id is not None else None,
+                "action_spec": {
+                    "k": int(best_cfg.k) if best_cfg is not None else None,
+                    "mode": best_cfg.answer_mode if best_cfg is not None else None,
+                },
+                "metrics": best_metrics if best_metrics is not None else {},
+            },
+            "learned_policy": {
+                "metrics": learned_metrics,
+                "action_distribution": action_distribution,
+                "refusal_overrides": int(refusal_overrides),
+            },
+        }
+        with open(args.output_json, "w", encoding="utf-8") as handle:
+            json.dump(output_payload, handle, indent=2, sort_keys=False)
 
 
 if __name__ == "__main__":
