@@ -1,9 +1,0 @@
-timestamp_utc,method,slo_profile,baseline1_avg_reward,bestfixed_action_id,bestfixed_avg_reward,bestfixed_avg_accuracy,bestfixed_avg_cost_tokens,learned_avg_reward,learned_avg_accuracy,learned_avg_cost_tokens,learned_hallucination_rate,learned_refusal_rate,learned_refusal_overrides,label,baseline1_retrieval_hit_rate,bestfixed_retrieval_hit_rate,frac_action_0,frac_action_1,frac_action_2,frac_action_3,frac_action_4,learned_retrieval_hit_rate
-2025-12-26T23:46:55.236997Z,argmax,quality_first,-0.05784900000000003,0,-0.041872,0.25,244.36,-0.028711999999999963,0.275,358.56,0.53,0.295,0,"quality_first
-argmax",0.7582417582417582,0.6593406593406593,0.695,0.145,0.0,0.16,0.0,0.6813186813186813
-2025-12-27T00:03:49.989980Z,argmax,cheap,-0.052105999999999986,0,-0.016620000000000003,0.25,245.6,-0.3638199999999997,0.015,22.85,0.47,0.955,0,"cheap
-argmax",0.7582417582417582,0.6593406593406593,0.055,0.0,0.0,0.0,0.945,0.03296703296703297
-2025-12-27T00:23:58.776645Z,argmax_wt,quality_first,-0.05410099999999999,0,-0.023643999999999995,0.26,245.72,-0.135043,0.29,832.715,0.59,0.185,0,"quality_first
-argmax_wt",0.7582417582417582,0.6593406593406593,0.125,0.02,0.45,0.405,0.0,0.7912087912087912
-2025-12-27T00:40:30.592976Z,argmax_wt,cheap,-0.054098000000000014,0,-0.03227500000000003,0.255,243.875,-0.37969999999999937,0.0,11.0,0.455,1.0,0,"cheap
-argmax_wt",0.7582417582417582,0.6593406593406593,0.0,0.0,0.0,0.0,1.0,0.0
